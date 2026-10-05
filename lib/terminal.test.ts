@@ -347,6 +347,31 @@ describe('Terminal', () => {
       term.dispose();
     });
 
+    test('theme can change after open()', async () => {
+      const term = await createIsolatedTerminal({
+        cols: 10,
+        rows: 3,
+        theme: { foreground: '#101010', background: '#202020' },
+      });
+      term.open(container!);
+      term.write('a\x1b[31mb');
+      const warn = console.warn;
+      const warnings: unknown[] = [];
+      console.warn = (...args: unknown[]) => warnings.push(args);
+      try {
+        term.options.theme = { foreground: '#a0b0c0', background: '#010203', red: '#fe0000' };
+      } finally {
+        console.warn = warn;
+      }
+      const [a, b] = term.wasmTerm!.getLine(0)!;
+      expect([a.fg_r, a.fg_g, a.fg_b]).toEqual([0xa0, 0xb0, 0xc0]);
+      expect([a.bg_r, a.bg_g, a.bg_b]).toEqual([1, 2, 3]);
+      expect([b.fg_r, b.fg_g, b.fg_b]).toEqual([0xfe, 0, 0]);
+      expect((term.renderer as any).theme.background).toBe('#010203');
+      expect(warnings).toEqual([]);
+      term.dispose();
+    });
+
     test('reset() does not throw', async () => {
       const term = await createIsolatedTerminal();
       term.open(container!);

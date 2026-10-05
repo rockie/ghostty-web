@@ -38,6 +38,16 @@ export {
   type RenderStateCursor,
 };
 
+/** Default colors of a terminal (0xRRGGBB; 0 = library default). */
+export type TerminalColors = Pick<
+  GhosttyTerminalConfig,
+  'fgColor' | 'bgColor' | 'cursorColor' | 'palette'
+>;
+
+/** Fallback default colors: libghostty-vt's render state initial colors. */
+const DEFAULT_FOREGROUND = 0xffffff;
+const DEFAULT_BACKGROUND = 0x000000;
+
 /** Default scrollback when no config is given (lines, xterm.js semantics). */
 const DEFAULT_SCROLLBACK_LINES = 10000;
 
@@ -653,6 +663,19 @@ export class GhosttyTerminal {
     exports.ghostty_terminal_free(this.handle);
   }
 
+  /**
+   * Change the default foreground, background, cursor and palette colors of a
+   * live terminal. Unset colors (0 or undefined) go back to the library
+   * defaults. Colors a program set itself (OSC 4/10/11/12) keep precedence,
+   * as in Ghostty. Every row is re-read on the next update.
+   */
+  setColors(colors: TerminalColors): void {
+    this.applyColors(colors, true);
+    this.needsFullRead = true;
+    this.stale = true;
+    this.dirty = DirtyState.FULL;
+  }
+
   // ==========================================================================
   // RenderState API
   // ==========================================================================
@@ -1260,28 +1283,47 @@ export class GhosttyTerminal {
       this.setOption(k.OPT_SCROLLBACK_MAX_LINES, this.scratch.out);
     }
 
-    if (!config) return;
-    // Colors use 0xRRGGBB; 0 keeps the library default.
-    const setColor = (option: number, rgb: number | undefined) => {
-      if (!rgb) return;
+    this.applyColors(config ?? {}, false);
+  }
+
+  /**
+   * Set the default colors. Colors use 0xRRGGBB; 0 or undefined means the
+   * library default (left alone at creation, reset when `reset` is true).
+   */
+  private applyColors(colors: TerminalColors, reset: boolean): void {
+    const { runtime } = this;
+    const { exports, k } = runtime;
+    const writeColor = (option: number, rgb: number) => {
       writeRgb(runtime.u8(), this.scratch.out, rgb);
       this.setOption(option, this.scratch.out);
     };
-    setColor(k.OPT_COLOR_FOREGROUND, config.fgColor);
-    setColor(k.OPT_COLOR_BACKGROUND, config.bgColor);
-    setColor(k.OPT_COLOR_CURSOR, config.cursorColor);
+    const setColor = (option: number, rgb: number | undefined) => {
+      if (rgb) {
+        writeColor(option, rgb);
+      } else if (reset) {
+        this.setOption(option, 0);
+      }
+    };
+    // The render state only picks up foreground/background while both are
+    // set (libghostty-vt expects embedders to always configure defaults), so
+    // unset ones fall back to the render state's own initial white on black.
+    writeColor(k.OPT_COLOR_FOREGROUND, colors.fgColor || DEFAULT_FOREGROUND);
+    writeColor(k.OPT_COLOR_BACKGROUND, colors.bgColor || DEFAULT_BACKGROUND);
+    setColor(k.OPT_COLOR_CURSOR, colors.cursorColor);
 
-    if (config.palette?.some((rgb) => rgb)) {
+    if (colors.palette?.some((rgb) => rgb)) {
       const ptr = runtime.alloc(256 * 3);
       try {
         exports.ghostty_color_palette_default(ptr);
-        config.palette.slice(0, 256).forEach((rgb, i) => {
+        colors.palette.slice(0, 256).forEach((rgb, i) => {
           if (rgb) writeRgb(runtime.u8(), ptr + i * 3, rgb);
         });
         this.setOption(k.OPT_COLOR_PALETTE, ptr);
       } finally {
         runtime.free(ptr, 256 * 3);
       }
+    } else if (reset) {
+      this.setOption(k.OPT_COLOR_PALETTE, 0);
     }
   }
 

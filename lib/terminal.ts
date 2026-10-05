@@ -17,7 +17,13 @@
 
 import { BufferNamespace } from './buffer';
 import { EventEmitter } from './event-emitter';
-import type { Ghostty, GhosttyCell, GhosttyTerminal, GhosttyTerminalConfig } from './ghostty';
+import type {
+  Ghostty,
+  GhosttyCell,
+  GhosttyTerminal,
+  GhosttyTerminalConfig,
+  TerminalColors,
+} from './ghostty';
 import { getGhostty } from './index';
 import { InputHandler, type MouseTrackingConfig } from './input-handler';
 import type {
@@ -29,6 +35,7 @@ import type {
   ITerminalAddon,
   ITerminalCore,
   ITerminalOptions,
+  ITheme,
   IUnicodeVersionProvider,
 } from './interfaces';
 import { LinkDetector } from './link-detector';
@@ -202,8 +209,12 @@ export class Terminal implements ITerminalCore {
         break;
 
       case 'theme':
-        if (this.renderer) {
-          console.warn('ghostty-web: theme changes after open() are not yet fully supported');
+        if (this.renderer && this.wasmTerm) {
+          // Default colors live in the VT core (cell colors resolve against
+          // them) and in the renderer (background, cursor, selection).
+          this.wasmTerm.setColors(this.themeColors(this.options.theme));
+          this.renderer.setTheme(this.options.theme);
+          this.renderer.render(this.wasmTerm, true, this.viewportY, this);
         }
         break;
 
@@ -285,6 +296,39 @@ export class Terminal implements ITerminalCore {
   }
 
   /**
+   * Convert a theme to VT core default colors (0xRRGGBB; 0 = library default).
+   */
+  private themeColors(theme: ITheme | undefined): TerminalColors {
+    // Order: black, red, green, yellow, blue, magenta, cyan, white,
+    //        brightBlack, brightRed, brightGreen, brightYellow, brightBlue, brightMagenta, brightCyan, brightWhite
+    const palette: number[] = [
+      theme?.black,
+      theme?.red,
+      theme?.green,
+      theme?.yellow,
+      theme?.blue,
+      theme?.magenta,
+      theme?.cyan,
+      theme?.white,
+      theme?.brightBlack,
+      theme?.brightRed,
+      theme?.brightGreen,
+      theme?.brightYellow,
+      theme?.brightBlue,
+      theme?.brightMagenta,
+      theme?.brightCyan,
+      theme?.brightWhite,
+    ].map((color) => this.parseColorToHex(color));
+
+    return {
+      fgColor: this.parseColorToHex(theme?.foreground),
+      bgColor: this.parseColorToHex(theme?.background),
+      cursorColor: this.parseColorToHex(theme?.cursor),
+      palette,
+    };
+  }
+
+  /**
    * Convert terminal options to WASM terminal config.
    */
   private buildWasmConfig(): GhosttyTerminalConfig | undefined {
@@ -296,35 +340,7 @@ export class Terminal implements ITerminalCore {
       return undefined;
     }
 
-    // Build palette array from theme colors
-    // Order: black, red, green, yellow, blue, magenta, cyan, white,
-    //        brightBlack, brightRed, brightGreen, brightYellow, brightBlue, brightMagenta, brightCyan, brightWhite
-    const palette: number[] = [
-      this.parseColorToHex(theme?.black),
-      this.parseColorToHex(theme?.red),
-      this.parseColorToHex(theme?.green),
-      this.parseColorToHex(theme?.yellow),
-      this.parseColorToHex(theme?.blue),
-      this.parseColorToHex(theme?.magenta),
-      this.parseColorToHex(theme?.cyan),
-      this.parseColorToHex(theme?.white),
-      this.parseColorToHex(theme?.brightBlack),
-      this.parseColorToHex(theme?.brightRed),
-      this.parseColorToHex(theme?.brightGreen),
-      this.parseColorToHex(theme?.brightYellow),
-      this.parseColorToHex(theme?.brightBlue),
-      this.parseColorToHex(theme?.brightMagenta),
-      this.parseColorToHex(theme?.brightCyan),
-      this.parseColorToHex(theme?.brightWhite),
-    ];
-
-    return {
-      scrollbackLimit: scrollback,
-      fgColor: this.parseColorToHex(theme?.foreground),
-      bgColor: this.parseColorToHex(theme?.background),
-      cursorColor: this.parseColorToHex(theme?.cursor),
-      palette,
-    };
+    return { scrollbackLimit: scrollback, ...this.themeColors(theme) };
   }
 
   // ==========================================================================
