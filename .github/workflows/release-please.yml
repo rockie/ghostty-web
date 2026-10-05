@@ -17,6 +17,8 @@ concurrency:
 
 jobs:
   release-please:
+    # Disabled until npm trusted publishing is configured (see docs/release.md).
+    if: vars.RELEASE_AUTOMATION == 'true'
     name: release-please
     runs-on: ubuntu-latest
     steps:

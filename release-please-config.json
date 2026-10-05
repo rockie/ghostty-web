@@ -65,7 +65,7 @@
   ],
   "packages": {
     ".": {
-      "package-name": "ghostty-web",
+      "package-name": "@xgent-ai/ghostty-web",
       "changelog-path": "CHANGELOG.md",
       "extra-files": [
         {

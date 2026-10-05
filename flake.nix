@@ -14,7 +14,7 @@
           inherit system;
           overlays = [ zig-overlay.overlays.default ];
         };
-        zig = pkgs.zigpkgs."0.15.2";
+        zig = pkgs.zigpkgs."0.16.0";
       in {
         devShells.default = pkgs.mkShell {
           buildInputs = [
@@ -26,7 +26,7 @@
 
         packages.default = pkgs.stdenv.mkDerivation {
           pname = "ghostty-web";
-          version = "0.4.0"; # x-release-please-version
+          version = "0.5.0"; # x-release-please-version
 
           src = ./.;
 
