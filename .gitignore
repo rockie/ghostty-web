@@ -6,3 +6,6 @@ dist/
 
 # WASM build output (built locally and in CI)
 ghostty-vt.wasm
+
+# Local tarballs from `bun run pack:local`
+.pack/

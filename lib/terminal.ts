@@ -716,12 +716,26 @@ export class Terminal implements ITerminalCore {
   }
 
   /**
-   * Clear terminal screen
+   * Clear the entire buffer, making the prompt line the new first line
+   * (xterm.js semantics): scrollback and every row except the cursor's are
+   * erased, and the cursor row moves to the top.
    */
   clear(): void {
     this.assertOpen();
-    // Send ANSI clear screen and cursor home sequences
-    this.wasmTerm!.write('\x1b[2J\x1b[H');
+    const y = this.wasmTerm!.getCursor().y;
+    let seq = '';
+    if (y > 0) {
+      // Scroll the cursor row to the top and follow it with the cursor.
+      seq += `\x1b[${y}S\x1b[${y}A`;
+    }
+    if (this.rows > 1) {
+      // Erase everything below the (now top) cursor row.
+      seq += '\x1b7\x1b[2;1H\x1b[J\x1b8';
+    }
+    // Erase scrollback, including lines the scroll above just pushed into it.
+    seq += '\x1b[3J';
+    this.wasmTerm!.write(seq);
+    this.scrollToBottom();
   }
 
   /**

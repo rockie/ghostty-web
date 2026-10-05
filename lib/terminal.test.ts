@@ -325,6 +325,28 @@ describe('Terminal', () => {
       term.dispose();
     });
 
+    test('clear() keeps only the cursor line, at the top (xterm.js semantics)', async () => {
+      const term = await createIsolatedTerminal({ cols: 20, rows: 5 });
+      term.open(container!);
+      let data = '';
+      for (let i = 1; i <= 12; i++) data += `line ${i}\r\n`;
+      term.write(`${data}$ prompt`);
+      expect(term.getScrollbackLength()).toBeGreaterThan(0);
+
+      term.clear();
+
+      const buffer = term.buffer.active;
+      const lines = Array.from({ length: buffer.length }, (_, i) =>
+        buffer.getLine(i)!.translateToString(true)
+      );
+      expect(term.getScrollbackLength()).toBe(0);
+      expect(lines).toEqual(['$ prompt', '', '', '', '']);
+      expect(buffer.cursorY).toBe(0);
+      expect(buffer.cursorX).toBe('$ prompt'.length);
+
+      term.dispose();
+    });
+
     test('reset() does not throw', async () => {
       const term = await createIsolatedTerminal();
       term.open(container!);

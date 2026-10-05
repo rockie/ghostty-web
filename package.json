@@ -51,6 +51,7 @@
     "build:wasm": "./scripts/build-wasm.sh",
     "build:lib": "vite build",
     "build:wasm-copy": "cp ghostty-vt.wasm dist/",
+    "pack:local": "./scripts/pack-local.sh",
     "clean": "rm -rf dist",
     "preview": "vite preview",
     "test": "bun test",
