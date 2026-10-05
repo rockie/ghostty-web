@@ -1,5 +1,18 @@
 # Release runbook
 
+## Fork status (`@xgent-ai/ghostty-web`)
+
+Release automation (`release-please.yml`, `publish.yml`) only runs when the repository variable
+`RELEASE_AUTOMATION` is `true`. It stays off until npm trusted publishing is configured:
+
+1. The first version (`0.5.0`) is published manually: `bun run build && npm publish --access public`.
+2. On npmjs.com, add a trusted publisher for `@xgent-ai/ghostty-web`: repository `rockie/ghostty-web`, workflow
+   `publish.yml`.
+3. Allow GitHub Actions to create pull requests (Settings → Actions → General), then set
+   `RELEASE_AUTOMATION=true` (Settings → Secrets and variables → Actions → Variables).
+
+The `@ghostty-web/demo` package is not published from this fork.
+
 ## Automated flow
 
 1. Pull requests must use a Conventional Commit title such as `feat(renderer): add cursor support`.
@@ -7,7 +20,7 @@
 3. After changes land on `main`, `.github/workflows/release-please.yml` opens or updates one Release Please PR.
 4. Merging the Release Please PR creates one `vX.Y.Z-rc.N` tag and a GitHub prerelease while this RC configuration is enabled. The first expected release candidate is `v0.5.0-rc.0`.
 5. The Release Please workflow explicitly dispatches `.github/workflows/publish.yml` for the tag because workflows created with `GITHUB_TOKEN` do not reliably trigger follow-up workflows automatically.
-6. `publish.yml` validates the tag and source versions, runs the release quality gates, publishes `ghostty-web`, then publishes `@ghostty-web/demo` with its `ghostty-web` dependency pinned to the exact release version.
+6. `publish.yml` validates the tag and source versions, runs the release quality gates, publishes `@xgent-ai/ghostty-web`.
 
 ## AI release notes
 
@@ -21,7 +34,7 @@ The AI path uses an AI SDK `ToolLoopAgent` with scoped tools. It can list the re
 
 ## Next publishes
 
-`.github/workflows/publish.yml` also publishes `ghostty-web@next` and `@ghostty-web/demo@next` after successful CI on `main`. Release-only squash commits whose subject matches `chore(release): ...` are skipped so version/changelog-only release PR merges do not create noisy prereleases.
+`.github/workflows/publish.yml` also publishes `@xgent-ai/ghostty-web@next` after successful CI on `main`. Release-only squash commits whose subject matches `chore(release): ...` are skipped so version/changelog-only release PR merges do not create noisy prereleases.
 
 Stable, release-candidate, and `next` publishing intentionally live in this single workflow file because npm trusted publishing is configured against a workflow identity.
 
@@ -45,7 +58,7 @@ When the pipeline has been test-driven successfully and maintainers are ready fo
 
 Before the first automated stable release:
 
-- Configure npm trusted publishers for both `ghostty-web` and `@ghostty-web/demo` for `.github/workflows/publish.yml`.
+- Configure an npm trusted publisher for `@xgent-ai/ghostty-web` for `.github/workflows/publish.yml`.
 - Add the `ANTHROPIC_API_KEY` repository secret if AI editorial notes should be enabled.
 - Add the `RELEASE_NOTES_MODEL` repository variable when using AI notes.
 - Enable squash merging, disable merge commits and rebase merging, and set squash commit titles to use the pull request title.

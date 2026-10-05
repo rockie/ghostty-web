@@ -18,7 +18,7 @@ let ghosttyInstance: Ghostty | null = null;
  *
  * @example
  * ```typescript
- * import { init, Terminal } from 'ghostty-web';
+ * import { init, Terminal } from '@xgent-ai/ghostty-web';
  *
  * await init();
  * const term = new Terminal();
@@ -42,11 +42,11 @@ export function getGhostty(): Ghostty {
     throw new Error(
       'ghostty-web not initialized. Call init() before creating Terminal instances.\n' +
         'Example:\n' +
-        '  import { init, Terminal } from "ghostty-web";\n' +
+        '  import { init, Terminal } from "@xgent-ai/ghostty-web";\n' +
         '  await init();\n' +
         '  const term = new Terminal();\n\n' +
         'For tests, pass a Ghostty instance directly:\n' +
-        '  import { Ghostty, Terminal } from "ghostty-web";\n' +
+        '  import { Ghostty, Terminal } from "@xgent-ai/ghostty-web";\n' +
         '  const ghostty = await Ghostty.load();\n' +
         '  const term = new Terminal({ ghostty });'
     );

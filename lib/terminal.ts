@@ -5,7 +5,7 @@
  *
  * Usage:
  * ```typescript
- * import { init, Terminal } from 'ghostty-web';
+ * import { init, Terminal } from '@xgent-ai/ghostty-web';
  *
  * await init();
  * const term = new Terminal();
