@@ -6,7 +6,7 @@
 
 - Migrate from xterm by changing your import: `@xterm/xterm` → `ghostty-web`
 - WASM-compiled parser from Ghostty—the same code that runs the native app
-- Zero runtime dependencies, ~400KB WASM bundle
+- Zero runtime dependencies, ~800KB WASM bundle (~280KB gzipped)
 
 Originally created for [Mux](https://github.com/coder/mux) (a desktop app for isolated, parallel agentic development), but designed to be used anywhere.
 
@@ -69,16 +69,28 @@ For a comprehensive client <-> server example, refer to the [demo](./demo/index.
 
 ## Development
 
-ghostty-web builds from Ghostty's source with a [patch](./patches/ghostty-wasm-api.patch) to expose additional
-functionality.
+ghostty-web builds `ghostty-vt.wasm` from the pinned Ghostty submodule with upstream's own
+libghostty-vt WebAssembly target and C API — no patches. Struct layouts and enum values are read at
+load time from the library's `ghostty_type_json()` description.
 
-> Requires Zig and Bun.
+> Requires Zig (the version in `ghostty/build.zig.zon`, currently 0.16.0) and Bun.
 
 ```bash
 bun run build
 ```
 
-Mitchell Hashimoto (author of Ghostty) has [been working](https://mitchellh.com/writing/libghostty-is-coming) on `libghostty` which makes this all possible. The patches are very minimal thanks to the work the Ghostty team has done, and we expect them to get smaller.
+To move to a newer Ghostty, update the submodule and rebuild:
+
+```bash
+git -C ghostty fetch --depth 1 origin <commit> && git -C ghostty checkout <commit>
+bun run build:wasm && bun test
+```
+
+If Zig cannot download dependencies (for example behind some HTTPS proxies), `scripts/build-wasm.sh`
+falls back to downloading them with `curl` and adding them with `zig fetch`, which verifies each
+archive against the hashes in `build.zig.zon`.
+
+Mitchell Hashimoto (author of Ghostty) has [been working](https://mitchellh.com/writing/libghostty-is-coming) on `libghostty` which makes this all possible.
 
 This library will eventually consume a native Ghostty WASM distribution once available, and will continue to provide an xterm.js compatible API.
 

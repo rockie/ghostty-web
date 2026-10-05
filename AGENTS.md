@@ -43,7 +43,7 @@ This is a **fully functional terminal emulator** (MVP complete) that uses Ghostt
 
 - TypeScript + Bun runtime for tests
 - Vite for dev server and bundling
-- Ghostty WASM (404 KB, committed) for VT100 parsing
+- Ghostty WASM (libghostty-vt, ~800 KB, built from the `ghostty` submodule) for VT100 parsing
 - Canvas API for rendering
 
 ## Architecture
@@ -319,11 +319,11 @@ python3 -m http.server
 
 **Why:** Demos import TypeScript modules directly (`from './lib/terminal.ts'`). Need Vite to transpile.
 
-### 2. **WASM Binary is Committed**
+### 2. **WASM Binary Is Built From the Submodule**
 
-- `ghostty-vt.wasm` (404 KB) is in the repo
-- Don't need to rebuild unless updating Ghostty version
-- Rebuild instructions in README.md if needed
+- `ghostty-vt.wasm` is built from the pinned `ghostty` submodule (`bun run build:wasm`, Zig 0.16+)
+- The binding (`lib/ghostty.ts`, `lib/wasm-abi.ts`) uses the upstream libghostty-vt C API; no patches
+- Rebuild instructions in README.md
 
 ### 3. **Test Timeouts**
 
