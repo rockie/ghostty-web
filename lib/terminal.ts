@@ -93,6 +93,7 @@ export class Terminal implements ITerminalCore {
   private scrollEmitter = new EventEmitter<number>();
   private renderEmitter = new EventEmitter<{ start: number; end: number }>();
   private cursorMoveEmitter = new EventEmitter<void>();
+  private responseEmitter = new EventEmitter<string>();
   // Public event accessors (xterm.js compatibility)
   public readonly onData: IEvent<string> = this.dataEmitter.event;
   public readonly onResize: IEvent<{ cols: number; rows: number }> = this.resizeEmitter.event;
@@ -103,6 +104,7 @@ export class Terminal implements ITerminalCore {
   public readonly onScroll: IEvent<number> = this.scrollEmitter.event;
   public readonly onRender: IEvent<{ start: number; end: number }> = this.renderEmitter.event;
   public readonly onCursorMove: IEvent<void> = this.cursorMoveEmitter.event;
+  public readonly onResponse: IEvent<string> = this.responseEmitter.event;
 
   // Lifecycle state
   private isOpen = false;
@@ -158,6 +160,7 @@ export class Terminal implements ITerminalCore {
       allowTransparency: options.allowTransparency ?? false,
       convertEol: options.convertEol ?? false,
       disableStdin: options.disableStdin ?? false,
+      responsesAsData: options.responsesAsData ?? true,
       smoothScrollDuration: options.smoothScrollDuration ?? 100, // Default: 100ms smooth scroll
     };
 
@@ -1165,6 +1168,7 @@ export class Terminal implements ITerminalCore {
     this.scrollEmitter.dispose();
     this.renderEmitter.dispose();
     this.cursorMoveEmitter.dispose();
+    this.responseEmitter.dispose();
   }
 
   // ==========================================================================
@@ -1873,9 +1877,12 @@ export class Terminal implements ITerminalCore {
     while (true) {
       const response = this.wasmTerm.readResponse();
       if (response === null) break;
+      this.responseEmitter.fire(response);
       // Send response back to the PTY via onData
       // This is the same path as user keyboard input
-      this.dataEmitter.fire(response);
+      if (this.options.responsesAsData) {
+        this.dataEmitter.fire(response);
+      }
     }
   }
 

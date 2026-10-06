@@ -1182,6 +1182,80 @@ describe('Terminal Options', () => {
   });
 });
 
+describe('Terminal responses', () => {
+  let container: HTMLElement | null = null;
+
+  beforeEach(() => {
+    if (typeof document !== 'undefined') {
+      container = document.createElement('div');
+      document.body.appendChild(container);
+    }
+  });
+
+  afterEach(() => {
+    if (container && container.parentNode) {
+      container.parentNode.removeChild(container);
+      container = null;
+    }
+  });
+
+  test('responses go through onData and onResponse by default', async () => {
+    const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
+    if (!container) return;
+    term.open(container);
+
+    const data: string[] = [];
+    const responses: string[] = [];
+    term.onData((d) => data.push(d));
+    term.onResponse((r) => responses.push(r));
+
+    term.write('\x1b[5n');
+
+    expect(data).toEqual(['\x1b[0n']);
+    expect(responses).toEqual(['\x1b[0n']);
+    term.dispose();
+  });
+
+  test('responsesAsData: false keeps responses out of onData', async () => {
+    const term = await createIsolatedTerminal({ cols: 80, rows: 24, responsesAsData: false });
+    if (!container) return;
+    term.open(container);
+
+    const data: string[] = [];
+    const responses: string[] = [];
+    term.onData((d) => data.push(d));
+    term.onResponse((r) => responses.push(r));
+
+    term.write('abc\x1b[6n\x1b[5n');
+
+    expect(data).toEqual([]);
+    expect(responses.join('')).toBe('\x1b[1;4R\x1b[0n');
+
+    // User input still reaches onData.
+    term.input('x', true);
+    expect(data).toEqual(['x']);
+    term.dispose();
+  });
+
+  test('responsesAsData can be switched at runtime', async () => {
+    const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
+    if (!container) return;
+    term.open(container);
+
+    const data: string[] = [];
+    term.onData((d) => data.push(d));
+
+    term.options.responsesAsData = false;
+    term.write('\x1b[5n');
+    expect(data).toEqual([]);
+
+    term.options.responsesAsData = true;
+    term.write('\x1b[5n');
+    expect(data).toEqual(['\x1b[0n']);
+    term.dispose();
+  });
+});
+
 describe('Buffer Access API', () => {
   let term: Terminal;
   let container: HTMLElement;
