@@ -35,7 +35,6 @@ export interface SelectionCoordinates {
 export class SelectionManager {
   private terminal: Terminal;
   private renderer: CanvasRenderer;
-  private wasmTerm: GhosttyTerminal;
   private textarea: HTMLTextAreaElement;
 
   // Selection state - coordinates are in ABSOLUTE buffer space (viewportY + viewportRow)
@@ -96,18 +95,18 @@ export class SelectionManager {
     const viewportY = this.getViewportY();
     return absoluteRow - scrollbackLength + viewportY;
   }
+
+  // Always the terminal's current one: reset() replaces it.
+  private get wasmTerm(): GhosttyTerminal {
+    return this.terminal.wasmTerm!;
+  }
+
   private static readonly AUTO_SCROLL_SPEED = 3; // lines per interval
   private static readonly AUTO_SCROLL_INTERVAL = 50; // ms between scroll steps
 
-  constructor(
-    terminal: Terminal,
-    renderer: CanvasRenderer,
-    wasmTerm: GhosttyTerminal,
-    textarea: HTMLTextAreaElement
-  ) {
+  constructor(terminal: Terminal, renderer: CanvasRenderer, textarea: HTMLTextAreaElement) {
     this.terminal = terminal;
     this.renderer = renderer;
-    this.wasmTerm = wasmTerm;
     this.textarea = textarea;
 
     // Attach mouse event listeners

@@ -381,6 +381,35 @@ describe('Terminal', () => {
       term.dispose();
     });
 
+    test('selection reads the terminal created by reset()', async () => {
+      const term = await createIsolatedTerminal();
+      term.open(container!);
+      term.write('before\r\n');
+      const freed = term.wasmTerm!;
+      term.reset();
+      // Reading a freed terminal is undefined; make it visibly wrong.
+      freed.getLine = () => null;
+      term.write('after');
+
+      term.select(0, 0, 5);
+      expect(term.getSelection()).toBe('after');
+
+      term.dispose();
+    });
+
+    test('reset() clears the selection', async () => {
+      const term = await createIsolatedTerminal();
+      term.open(container!);
+      term.write('before');
+      term.select(0, 0, 6);
+      term.reset();
+
+      expect(term.hasSelection()).toBe(false);
+      expect(term.getSelection()).toBe('');
+
+      term.dispose();
+    });
+
     test('focus() does not throw', async () => {
       const term = await createIsolatedTerminal();
       term.open(container!);

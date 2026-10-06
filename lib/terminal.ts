@@ -451,10 +451,9 @@ export class Terminal implements ITerminalCore {
       // Create mouse tracking configuration
       const canvas = this.canvas;
       const renderer = this.renderer;
-      const wasmTerm = this.wasmTerm;
       const mouseConfig: MouseTrackingConfig = {
-        hasMouseTracking: () => wasmTerm?.hasMouseTracking() ?? false,
-        hasSgrMouseMode: () => wasmTerm?.getMode(1006, false) ?? true, // SGR extended mode
+        hasMouseTracking: () => this.wasmTerm?.hasMouseTracking() ?? false,
+        hasSgrMouseMode: () => this.wasmTerm?.getMode(1006, false) ?? true, // SGR extended mode
         getCellDimensions: () => ({
           width: renderer.charWidth,
           height: renderer.charHeight,
@@ -502,12 +501,7 @@ export class Terminal implements ITerminalCore {
       );
 
       // Create selection manager (pass textarea for context menu positioning)
-      this.selectionManager = new SelectionManager(
-        this,
-        this.renderer,
-        this.wasmTerm,
-        this.textarea
-      );
+      this.selectionManager = new SelectionManager(this, this.renderer, this.textarea);
 
       // Connect selection manager to renderer
       this.renderer.setSelectionManager(this.selectionManager);
@@ -762,6 +756,9 @@ export class Terminal implements ITerminalCore {
    */
   reset(): void {
     this.assertOpen();
+
+    // Selection coordinates refer to the old content
+    this.selectionManager?.clearSelection();
 
     // Free old WASM terminal and create new one
     if (this.wasmTerm) {
