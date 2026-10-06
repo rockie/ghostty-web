@@ -17,7 +17,13 @@
 
 import { BufferNamespace } from './buffer';
 import { EventEmitter } from './event-emitter';
-import type { Ghostty, GhosttyCell, GhosttyTerminal, GhosttyTerminalConfig } from './ghostty';
+import type {
+  Ghostty,
+  GhosttyCell,
+  GhosttyTerminal,
+  GhosttyTerminalConfig,
+  TerminalColors,
+} from './ghostty';
 import { getGhostty } from './index';
 import { InputHandler, type MouseTrackingConfig } from './input-handler';
 import type {
@@ -29,6 +35,7 @@ import type {
   ITerminalAddon,
   ITerminalCore,
   ITerminalOptions,
+  ITheme,
   IUnicodeVersionProvider,
 } from './interfaces';
 import { LinkDetector } from './link-detector';
@@ -86,6 +93,7 @@ export class Terminal implements ITerminalCore {
   private scrollEmitter = new EventEmitter<number>();
   private renderEmitter = new EventEmitter<{ start: number; end: number }>();
   private cursorMoveEmitter = new EventEmitter<void>();
+  private responseEmitter = new EventEmitter<string>();
   // Public event accessors (xterm.js compatibility)
   public readonly onData: IEvent<string> = this.dataEmitter.event;
   public readonly onResize: IEvent<{ cols: number; rows: number }> = this.resizeEmitter.event;
@@ -96,6 +104,7 @@ export class Terminal implements ITerminalCore {
   public readonly onScroll: IEvent<number> = this.scrollEmitter.event;
   public readonly onRender: IEvent<{ start: number; end: number }> = this.renderEmitter.event;
   public readonly onCursorMove: IEvent<void> = this.cursorMoveEmitter.event;
+  public readonly onResponse: IEvent<string> = this.responseEmitter.event;
 
   // Lifecycle state
   private isOpen = false;
@@ -151,6 +160,7 @@ export class Terminal implements ITerminalCore {
       allowTransparency: options.allowTransparency ?? false,
       convertEol: options.convertEol ?? false,
       disableStdin: options.disableStdin ?? false,
+      responsesAsData: options.responsesAsData ?? true,
       smoothScrollDuration: options.smoothScrollDuration ?? 100, // Default: 100ms smooth scroll
     };
 
@@ -202,8 +212,12 @@ export class Terminal implements ITerminalCore {
         break;
 
       case 'theme':
-        if (this.renderer) {
-          console.warn('ghostty-web: theme changes after open() are not yet fully supported');
+        if (this.renderer && this.wasmTerm) {
+          // Default colors live in the VT core (cell colors resolve against
+          // them) and in the renderer (background, cursor, selection).
+          this.wasmTerm.setColors(this.themeColors(this.options.theme));
+          this.renderer.setTheme(this.options.theme);
+          this.renderer.render(this.wasmTerm, true, this.viewportY, this);
         }
         break;
 
@@ -285,6 +299,39 @@ export class Terminal implements ITerminalCore {
   }
 
   /**
+   * Convert a theme to VT core default colors (0xRRGGBB; 0 = library default).
+   */
+  private themeColors(theme: ITheme | undefined): TerminalColors {
+    // Order: black, red, green, yellow, blue, magenta, cyan, white,
+    //        brightBlack, brightRed, brightGreen, brightYellow, brightBlue, brightMagenta, brightCyan, brightWhite
+    const palette: number[] = [
+      theme?.black,
+      theme?.red,
+      theme?.green,
+      theme?.yellow,
+      theme?.blue,
+      theme?.magenta,
+      theme?.cyan,
+      theme?.white,
+      theme?.brightBlack,
+      theme?.brightRed,
+      theme?.brightGreen,
+      theme?.brightYellow,
+      theme?.brightBlue,
+      theme?.brightMagenta,
+      theme?.brightCyan,
+      theme?.brightWhite,
+    ].map((color) => this.parseColorToHex(color));
+
+    return {
+      fgColor: this.parseColorToHex(theme?.foreground),
+      bgColor: this.parseColorToHex(theme?.background),
+      cursorColor: this.parseColorToHex(theme?.cursor),
+      palette,
+    };
+  }
+
+  /**
    * Convert terminal options to WASM terminal config.
    */
   private buildWasmConfig(): GhosttyTerminalConfig | undefined {
@@ -296,35 +343,7 @@ export class Terminal implements ITerminalCore {
       return undefined;
     }
 
-    // Build palette array from theme colors
-    // Order: black, red, green, yellow, blue, magenta, cyan, white,
-    //        brightBlack, brightRed, brightGreen, brightYellow, brightBlue, brightMagenta, brightCyan, brightWhite
-    const palette: number[] = [
-      this.parseColorToHex(theme?.black),
-      this.parseColorToHex(theme?.red),
-      this.parseColorToHex(theme?.green),
-      this.parseColorToHex(theme?.yellow),
-      this.parseColorToHex(theme?.blue),
-      this.parseColorToHex(theme?.magenta),
-      this.parseColorToHex(theme?.cyan),
-      this.parseColorToHex(theme?.white),
-      this.parseColorToHex(theme?.brightBlack),
-      this.parseColorToHex(theme?.brightRed),
-      this.parseColorToHex(theme?.brightGreen),
-      this.parseColorToHex(theme?.brightYellow),
-      this.parseColorToHex(theme?.brightBlue),
-      this.parseColorToHex(theme?.brightMagenta),
-      this.parseColorToHex(theme?.brightCyan),
-      this.parseColorToHex(theme?.brightWhite),
-    ];
-
-    return {
-      scrollbackLimit: scrollback,
-      fgColor: this.parseColorToHex(theme?.foreground),
-      bgColor: this.parseColorToHex(theme?.background),
-      cursorColor: this.parseColorToHex(theme?.cursor),
-      palette,
-    };
+    return { scrollbackLimit: scrollback, ...this.themeColors(theme) };
   }
 
   // ==========================================================================
@@ -716,12 +735,26 @@ export class Terminal implements ITerminalCore {
   }
 
   /**
-   * Clear terminal screen
+   * Clear the entire buffer, making the prompt line the new first line
+   * (xterm.js semantics): scrollback and every row except the cursor's are
+   * erased, and the cursor row moves to the top.
    */
   clear(): void {
     this.assertOpen();
-    // Send ANSI clear screen and cursor home sequences
-    this.wasmTerm!.write('\x1b[2J\x1b[H');
+    const y = this.wasmTerm!.getCursor().y;
+    let seq = '';
+    if (y > 0) {
+      // Scroll the cursor row to the top and follow it with the cursor.
+      seq += `\x1b[${y}S\x1b[${y}A`;
+    }
+    if (this.rows > 1) {
+      // Erase everything below the (now top) cursor row.
+      seq += '\x1b7\x1b[2;1H\x1b[J\x1b8';
+    }
+    // Erase scrollback, including lines the scroll above just pushed into it.
+    seq += '\x1b[3J';
+    this.wasmTerm!.write(seq);
+    this.scrollToBottom();
   }
 
   /**
@@ -1135,6 +1168,7 @@ export class Terminal implements ITerminalCore {
     this.scrollEmitter.dispose();
     this.renderEmitter.dispose();
     this.cursorMoveEmitter.dispose();
+    this.responseEmitter.dispose();
   }
 
   // ==========================================================================
@@ -1843,9 +1877,12 @@ export class Terminal implements ITerminalCore {
     while (true) {
       const response = this.wasmTerm.readResponse();
       if (response === null) break;
+      this.responseEmitter.fire(response);
       // Send response back to the PTY via onData
       // This is the same path as user keyboard input
-      this.dataEmitter.fire(response);
+      if (this.options.responsesAsData) {
+        this.dataEmitter.fire(response);
+      }
     }
   }
 

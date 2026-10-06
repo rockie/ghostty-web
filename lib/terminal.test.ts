@@ -325,6 +325,53 @@ describe('Terminal', () => {
       term.dispose();
     });
 
+    test('clear() keeps only the cursor line, at the top (xterm.js semantics)', async () => {
+      const term = await createIsolatedTerminal({ cols: 20, rows: 5 });
+      term.open(container!);
+      let data = '';
+      for (let i = 1; i <= 12; i++) data += `line ${i}\r\n`;
+      term.write(`${data}$ prompt`);
+      expect(term.getScrollbackLength()).toBeGreaterThan(0);
+
+      term.clear();
+
+      const buffer = term.buffer.active;
+      const lines = Array.from({ length: buffer.length }, (_, i) =>
+        buffer.getLine(i)!.translateToString(true)
+      );
+      expect(term.getScrollbackLength()).toBe(0);
+      expect(lines).toEqual(['$ prompt', '', '', '', '']);
+      expect(buffer.cursorY).toBe(0);
+      expect(buffer.cursorX).toBe('$ prompt'.length);
+
+      term.dispose();
+    });
+
+    test('theme can change after open()', async () => {
+      const term = await createIsolatedTerminal({
+        cols: 10,
+        rows: 3,
+        theme: { foreground: '#101010', background: '#202020' },
+      });
+      term.open(container!);
+      term.write('a\x1b[31mb');
+      const warn = console.warn;
+      const warnings: unknown[] = [];
+      console.warn = (...args: unknown[]) => warnings.push(args);
+      try {
+        term.options.theme = { foreground: '#a0b0c0', background: '#010203', red: '#fe0000' };
+      } finally {
+        console.warn = warn;
+      }
+      const [a, b] = term.wasmTerm!.getLine(0)!;
+      expect([a.fg_r, a.fg_g, a.fg_b]).toEqual([0xa0, 0xb0, 0xc0]);
+      expect([a.bg_r, a.bg_g, a.bg_b]).toEqual([1, 2, 3]);
+      expect([b.fg_r, b.fg_g, b.fg_b]).toEqual([0xfe, 0, 0]);
+      expect((term.renderer as any).theme.background).toBe('#010203');
+      expect(warnings).toEqual([]);
+      term.dispose();
+    });
+
     test('reset() does not throw', async () => {
       const term = await createIsolatedTerminal();
       term.open(container!);
@@ -1132,6 +1179,80 @@ describe('Terminal Options', () => {
       expect(received).toBe(false);
       term.dispose();
     });
+  });
+});
+
+describe('Terminal responses', () => {
+  let container: HTMLElement | null = null;
+
+  beforeEach(() => {
+    if (typeof document !== 'undefined') {
+      container = document.createElement('div');
+      document.body.appendChild(container);
+    }
+  });
+
+  afterEach(() => {
+    if (container && container.parentNode) {
+      container.parentNode.removeChild(container);
+      container = null;
+    }
+  });
+
+  test('responses go through onData and onResponse by default', async () => {
+    const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
+    if (!container) return;
+    term.open(container);
+
+    const data: string[] = [];
+    const responses: string[] = [];
+    term.onData((d) => data.push(d));
+    term.onResponse((r) => responses.push(r));
+
+    term.write('\x1b[5n');
+
+    expect(data).toEqual(['\x1b[0n']);
+    expect(responses).toEqual(['\x1b[0n']);
+    term.dispose();
+  });
+
+  test('responsesAsData: false keeps responses out of onData', async () => {
+    const term = await createIsolatedTerminal({ cols: 80, rows: 24, responsesAsData: false });
+    if (!container) return;
+    term.open(container);
+
+    const data: string[] = [];
+    const responses: string[] = [];
+    term.onData((d) => data.push(d));
+    term.onResponse((r) => responses.push(r));
+
+    term.write('abc\x1b[6n\x1b[5n');
+
+    expect(data).toEqual([]);
+    expect(responses.join('')).toBe('\x1b[1;4R\x1b[0n');
+
+    // User input still reaches onData.
+    term.input('x', true);
+    expect(data).toEqual(['x']);
+    term.dispose();
+  });
+
+  test('responsesAsData can be switched at runtime', async () => {
+    const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
+    if (!container) return;
+    term.open(container);
+
+    const data: string[] = [];
+    term.onData((d) => data.push(d));
+
+    term.options.responsesAsData = false;
+    term.write('\x1b[5n');
+    expect(data).toEqual([]);
+
+    term.options.responsesAsData = true;
+    term.write('\x1b[5n');
+    expect(data).toEqual(['\x1b[0n']);
+    term.dispose();
   });
 });
 

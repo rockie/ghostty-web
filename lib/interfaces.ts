@@ -19,6 +19,12 @@ export interface ITerminalOptions {
   convertEol?: boolean; // Convert \n to \r\n (default: false)
   disableStdin?: boolean; // Disable keyboard input (default: false)
 
+  // Replies the terminal generates for queries such as DSR/CPR always fire on
+  // onResponse; when true they also fire on onData like user input (xterm.js
+  // behavior). Hosts that answer queries elsewhere set this to false so a
+  // reply is not sent to the PTY twice. (default: true)
+  responsesAsData?: boolean;
+
   // Scrolling options
   smoothScrollDuration?: number; // Duration in ms for smooth scroll animation (default: 100, 0 = instant)
 

@@ -142,6 +142,39 @@ describe('cell decoding', () => {
   });
 });
 
+describe('runtime colors', () => {
+  test('setColors recolors existing content and resets to defaults', () => {
+    withTerminal(10, 3, (term) => {
+      term.write('a\x1b[31mb\x1b[0m');
+      const defaults = term.getColors();
+
+      term.setColors({ fgColor: 0x112233, bgColor: 0x445566, palette: [0, 0x778899] });
+      let [a, b] = term.getLine(0)!;
+      expect(rgb(a, 'fg')).toEqual([0x11, 0x22, 0x33]);
+      expect(rgb(a, 'bg')).toEqual([0x44, 0x55, 0x66]);
+      expect(rgb(b, 'fg')).toEqual([0x77, 0x88, 0x99]);
+      expect(term.needsFullRedraw()).toBe(true);
+
+      term.setColors({});
+      [a] = term.getLine(0)!;
+      expect(term.getColors()).toEqual(defaults);
+      expect(rgb(a, 'fg')).toEqual([
+        defaults.foreground.r,
+        defaults.foreground.g,
+        defaults.foreground.b,
+      ]);
+    });
+  });
+
+  test('colors set by the program (OSC 11) keep precedence', () => {
+    withTerminal(10, 3, (term) => {
+      term.write('\x1b]11;rgb:01/02/03\x1b\\x');
+      term.setColors({ bgColor: 0x445566 });
+      expect(term.getColors().background).toEqual({ r: 1, g: 2, b: 3 });
+    });
+  });
+});
+
 describe('scrollback', () => {
   test('lines, colors, graphemes and hyperlinks survive into history', () => {
     withTerminal(20, 3, (term) => {
