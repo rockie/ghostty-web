@@ -466,6 +466,72 @@ describe('SelectionManager', () => {
     });
   });
 
+  describe('Auto-scroll during drag selection', () => {
+    test('dragging within the second row does not start auto-scroll', async () => {
+      if (!container) return;
+
+      const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
+      term.open(container);
+
+      const selMgr = (term as any).selectionManager;
+      const rowHeight = (term as any).renderer.getMetrics().height;
+      (selMgr as any).updateAutoScroll(rowHeight * 1.5, rowHeight * 24);
+
+      expect((selMgr as any).autoScrollDirection).toBe(0);
+
+      (selMgr as any).stopAutoScroll();
+      term.dispose();
+    });
+
+    test('auto-scroll that cannot scroll leaves the selection where the mouse put it', async () => {
+      if (!container) return;
+
+      const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
+      term.open(container);
+
+      term.write('ls\r\nfirst line of output\r\n');
+
+      // No scrollback: there is nothing above the first row to scroll to.
+      const second = viewportToAbsolute(term, 1);
+      setSelectionAbsolute(term, 0, second, 5, second);
+      const selMgr = (term as any).selectionManager;
+      (selMgr as any).isSelecting = true;
+      (selMgr as any).startAutoScroll(-1);
+      await new Promise((resolve) => setTimeout(resolve, 120));
+      (selMgr as any).isSelecting = false;
+      (selMgr as any).stopAutoScroll();
+
+      expect((selMgr as any).selectionEnd).toEqual({ col: 5, absoluteRow: second });
+
+      term.dispose();
+    });
+
+    test('auto-scroll into history still extends the selection', async () => {
+      if (!container) return;
+
+      const term = await createIsolatedTerminal({ cols: 80, rows: 24 });
+      term.open(container);
+
+      for (let i = 1; i <= 60; i++) {
+        term.write(`line ${i}\r\n`);
+      }
+
+      const top = viewportToAbsolute(term, 0);
+      setSelectionAbsolute(term, 0, top + 5, 0, top);
+      const selMgr = (term as any).selectionManager;
+      (selMgr as any).isSelecting = true;
+      (selMgr as any).startAutoScroll(-1);
+      await new Promise((resolve) => setTimeout(resolve, 120));
+      (selMgr as any).isSelecting = false;
+      (selMgr as any).stopAutoScroll();
+
+      expect(term.getViewportY()).toBeGreaterThan(0);
+      expect((selMgr as any).selectionEnd.absoluteRow).toBeLessThan(top);
+
+      term.dispose();
+    });
+  });
+
   describe('selectAll', () => {
     test('selectAll selects entire viewport', async () => {
       if (!container) return;

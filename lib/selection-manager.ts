@@ -766,7 +766,12 @@ export class SelectionManager {
    * Update auto-scroll based on mouse Y position within canvas
    */
   private updateAutoScroll(offsetY: number, canvasHeight: number): void {
-    const edgeSize = SelectionManager.AUTO_SCROLL_EDGE_SIZE;
+    // Never more than half a row: otherwise dragging in the second (or second-to-last) row
+    // scrolls instead of selecting there.
+    const edgeSize = Math.min(
+      SelectionManager.AUTO_SCROLL_EDGE_SIZE,
+      this.renderer.getMetrics().height / 2
+    );
 
     if (offsetY < edgeSize) {
       // Near top edge - scroll up
@@ -806,11 +811,14 @@ export class SelectionManager {
       // scrollLines convention: negative = scroll up into history, positive = scroll down to newer
       // So direction maps directly to scrollLines sign
       const scrollAmount = SelectionManager.AUTO_SCROLL_SPEED * this.autoScrollDirection;
+      const viewportYBefore = this.getViewportY();
       (this.terminal as any).scrollLines(scrollAmount);
 
       // Extend selection in the scroll direction
       // Key insight: we need to EXTEND the selection, not reset it to viewport edge
-      if (this.selectionEnd) {
+      // Only when the view actually scrolled: at the top or bottom of the buffer there is
+      // nothing new to select, and the selection stays where the mouse put it.
+      if (this.selectionEnd && this.getViewportY() !== viewportYBefore) {
         const dims = this.wasmTerm.getDimensions();
         if (this.autoScrollDirection < 0) {
           // Scrolling up - extend selection upward (decrease absoluteRow)
